@@ -1,0 +1,7 @@
+{
+  "name":"lobo-espetaria-v6",
+  "version":"6.0.0",
+  "private":true,
+  "scripts":{"start":"node server.js"},
+  "dependencies":{"better-sqlite3":"^11.8.1","express":"^4.21.2"}
+}

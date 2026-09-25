@@ -1,0 +1,95 @@
+
+const express = require("express");
+const Database = require("better-sqlite3");
+const crypto = require("crypto");
+const path = require("path");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "lobo123";
+const db = new Database(path.join(__dirname, "data", "lobo.db"));
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS orders (
+ id TEXT PRIMARY KEY, number TEXT UNIQUE, created_at INTEGER NOT NULL,
+ status TEXT NOT NULL, customer TEXT NOT NULL, address TEXT NOT NULL,
+ payment TEXT NOT NULL, items TEXT NOT NULL, subtotal REAL NOT NULL,
+ delivery_fee REAL NOT NULL, total REAL NOT NULL, notes TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS settings (
+ key TEXT PRIMARY KEY, value TEXT NOT NULL
+);
+INSERT OR IGNORE INTO settings(key,value) VALUES
+ ('restaurant','Lobo Espetaria'),('whatsapp',''),('delivery_fee','0');
+`);
+
+app.use(express.json({limit:"1mb"}));
+app.use(express.static(path.join(__dirname,"public")));
+
+function setting(k){ const r=db.prepare("SELECT value FROM settings WHERE key=?").get(k); return r?.value ?? ""; }
+function setSetting(k,v){ db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(k,String(v)); }
+function auth(req,res,next){
+ const token=req.headers.authorization?.replace("Bearer ","");
+ if(token !== process.env.ADMIN_TOKEN) return res.status(401).json({error:"Não autorizado."});
+ next();
+}
+function rowToOrder(r){ return {...r, items:JSON.parse(r.items)}; }
+
+app.get("/api/config",(req,res)=>res.json({
+ restaurant:setting("restaurant"), whatsapp:setting("whatsapp"), deliveryFee:Number(setting("delivery_fee")||0)
+}));
+
+app.post("/api/orders",(req,res)=>{
+ const b=req.body||{};
+ if(!b.customer || !b.address || !Array.isArray(b.items) || !b.items.length)
+   return res.status(400).json({error:"Nome, endereço e itens são obrigatórios."});
+ const subtotal=Number(b.subtotal||0), fee=Number(b.deliveryFee ?? setting("delivery_fee") ?? 0);
+ const total=Number(b.total ?? subtotal+fee);
+ const id=crypto.randomUUID(), number=String(Date.now()).slice(-6);
+ db.prepare(`INSERT INTO orders VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+   id,number,Date.now(),"Novo",String(b.customer),String(b.address),
+   String(b.payment||"Pix"),JSON.stringify(b.items),subtotal,fee,total,String(b.notes||"")
+ );
+ res.status(201).json({id,number,createdAt:Date.now(),status:"Novo",customer:b.customer,address:b.address,
+ payment:b.payment||"Pix",items:b.items,subtotal,deliveryFee:fee,total,notes:b.notes||""});
+});
+
+app.get("/api/orders/:number",(req,res)=>{
+ const r=db.prepare("SELECT * FROM orders WHERE number=?").get(req.params.number);
+ if(!r) return res.status(404).json({error:"Pedido não encontrado."});
+ res.json(rowToOrder(r));
+});
+
+app.post("/api/admin/login",(req,res)=>{
+ if(String(req.body.password||"")!==ADMIN_PASSWORD) return res.status(401).json({error:"Senha inválida."});
+ const token=crypto.randomBytes(32).toString("hex");
+ process.env.ADMIN_TOKEN=token;
+ res.json({token});
+});
+
+app.get("/api/admin/orders",auth,(req,res)=>{
+ const rows=db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all();
+ res.json(rows.map(rowToOrder));
+});
+
+app.patch("/api/admin/orders/:id",auth,(req,res)=>{
+ const allowed=["Novo","Preparando","Saiu para entrega","Entregue","Cancelado"];
+ if(!allowed.includes(req.body.status)) return res.status(400).json({error:"Status inválido."});
+ const info=db.prepare("UPDATE orders SET status=? WHERE id=?").run(req.body.status,req.params.id);
+ if(!info.changes) return res.status(404).json({error:"Pedido não encontrado."});
+ res.json({ok:true});
+});
+
+app.get("/api/admin/settings",auth,(req,res)=>res.json({
+ restaurant:setting("restaurant"),whatsapp:setting("whatsapp"),deliveryFee:Number(setting("delivery_fee")||0)
+}));
+
+app.patch("/api/admin/settings",auth,(req,res)=>{
+ if(req.body.restaurant!==undefined)setSetting("restaurant",req.body.restaurant);
+ if(req.body.whatsapp!==undefined)setSetting("whatsapp",req.body.whatsapp);
+ if(req.body.deliveryFee!==undefined)setSetting("delivery_fee",Number(req.body.deliveryFee)||0);
+ res.json({ok:true});
+});
+
+app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+app.listen(PORT,()=>console.log(`🐺 Lobo Espetaria rodando em http://localhost:${PORT}`));
