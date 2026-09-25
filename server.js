@@ -1,4 +1,3 @@
-
 const express = require("express");
 const Database = require("better-sqlite3");
 const crypto = require("crypto");
@@ -8,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "lobo123";
 fs.mkdirSync(path.join(__dirname, "data"), { recursive: true });
-const db = new Database(...)
+const db = new Database(path.join(__dirname, "data", "lobo.sqlite"));
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS orders (
