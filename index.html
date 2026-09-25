@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🐺 Lobo Espetaria</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b0d;color:#fff;font-family:Arial,sans-serif}header{padding:18px;background:#17171b;position:sticky;top:0;z-index:3;border-bottom:1px solid #2b2b30}main{max-width:920px;margin:auto;padding:16px}
+h1{margin:0}.wolf{font-size:31px}.tabs{display:flex;gap:7px;overflow:auto;margin-top:13px}.tabs button,.btn{border:0;border-radius:12px;padding:11px 14px;font-weight:800;cursor:pointer}.tabs button{background:#29292f;color:#fff}.on{background:#fff!important;color:#111!important}.tab{display:none}.tab.on{display:block}
+.card{background:#17171c;border:1px solid #292930;border-radius:16px;padding:15px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}.prod{display:flex;justify-content:space-between;align-items:center;gap:8px}.btn{background:#fff;color:#111}.danger{background:#6e2222;color:#fff}input,select,textarea{width:100%;padding:12px;margin:5px 0 12px;border-radius:10px;border:1px solid #333;background:#0e0e12;color:#fff}.muted{color:#aaa;font-size:13px}.pill{display:inline-block;padding:6px 9px;border-radius:999px;background:#2b2b31;font-size:12px}.total{font-size:21px;font-weight:900}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style></head>
+<body><header><h1><span class="wolf">🐺</span> Lobo Espetaria</h1><div class="muted">Pedidos online • painel • acompanhamento</div>
+<div class="tabs"><button class="on" onclick="show('cliente',this)">Fazer pedido</button><button onclick="show('acompanhar',this)">Acompanhar</button><button onclick="show('admin',this)">Painel</button></div></header>
+<main>
+<section id="cliente" class="tab on"><div class="card"><h2>🍢 Cardápio</h2><div id="menu" class="grid"></div></div>
+<div class="card"><h2>🛒 Carrinho</h2><div id="cart"></div><p>Subtotal: <b id="sub">R$ 0,00</b></p><p>Entrega: <b id="fee">R$ 0,00</b></p><p class="total">Total: <span id="tot">R$ 0,00</span></p></div>
+<div class="card"><h2>📦 Dados</h2><input id="name" placeholder="Nome"><input id="address" placeholder="Endereço completo">
+<select id="pay"><option>Pix</option><option>Cartão</option><option>Dinheiro</option></select><textarea id="notes" placeholder="Observação"></textarea><button class="btn" onclick="order()">CONFIRMAR PEDIDO</button><div id="msg"></div></div></section>
+
+<section id="acompanhar" class="tab"><div class="card"><h2>🔎 Acompanhar pedido</h2><input id="track" placeholder="Número do pedido"><button class="btn" onclick="track()">CONSULTAR</button><div id="tracking"></div></div></section>
+
+<section id="admin" class="tab"><div id="loginBox" class="card"><h2>🔐 Painel do dono</h2><input id="pwd" type="password" placeholder="Senha do administrador"><button class="btn" onclick="login()">ENTRAR</button></div>
+<div id="adminBox" style="display:none"><div class="card"><div class="row"><h2 style="margin-right:auto">📋 Pedidos</h2><button class="btn" onclick="load()">Atualizar</button></div><div class="muted">Os pedidos são salvos no banco do servidor.</div><div id="orders"></div></div>
+<div class="card"><h2>⚙️ Configurações</h2><input id="rest" placeholder="Nome"><input id="wpp" placeholder="WhatsApp com DDI, ex.: 5524999999999"><input id="df" type="number" step=".01" placeholder="Taxa de entrega"><button class="btn" onclick="saveSettings()">SALVAR</button></div></div></section>
+</main>
+<script>
+const products=[["Carne",10],["Frango",9],["Linguiça",9],["Coração",10],["Coca-Cola lata",7],["Guaraviton 500ml",5],["Água com gás",4],["Água sem gás",3.5]];
+let cart=[],fee=0,token=localStorage.getItem("loboAdmin")||"";
+const br=n=>Number(n).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+function show(id,b){document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));document.getElementById(id).classList.add("on");document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));b.classList.add("on");if(id==="admin"&&token)load();}
+function renderMenu(){menu.innerHTML=products.map((p,i)=>`<div class="card prod"><div><b>${p[0]}</b><br>${br(p[1])}</div><button class="btn" onclick="add(${i})">Adicionar</button></div>`).join("")}
+function add(i){cart.push({name:products[i][0],price:products[i][1]});renderCart()}
+function renderCart(){cartEl=document.getElementById("cart");if(!cart.length){cartEl.innerHTML="Carrinho vazio.";return}cartEl.innerHTML=cart.map((x,i)=>`<div class="prod"><span>${x.name}</span><b>${br(x.price)}</b><button onclick="cart.splice(${i},1);renderCart()">×</button></div>`).join("");let s=cart.reduce((a,x)=>a+x.price,0);sub.textContent=br(s);document.getElementById("fee").textContent=br(fee);tot.textContent=br(s+fee)}
+async function cfg(){let r=await fetch("/api/config"),c=await r.json();fee=Number(c.deliveryFee||0);document.querySelector("h1").innerHTML="🐺 "+c.restaurant;renderCart()}
+async function order(){let customer=name.value.trim(),address=document.getElementById("address").value.trim();if(!customer||!address||!cart.length)return alert("Preencha nome, endereço e itens.");let s=cart.reduce((a,x)=>a+x.price,0);let body={customer,address,payment:pay.value,notes:notes.value,items:cart,subtotal:s,deliveryFee:fee,total:s+fee};let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),o=await r.json();if(!r.ok)return alert(o.error);msg.innerHTML=`<div class="card"><b>Pedido #${o.number} recebido! 🐺</b><br>Status: <span class="pill">Novo</span><br><button class="btn" onclick="wa(${JSON.stringify(o).replaceAll('"','&quot;')})">Enviar no WhatsApp</button></div>`;track.value=o.number;cart=[];renderCart()}
+function wa(o){let t=`🐺 LOBO ESPETARIA\\nPedido #${o.number}\\nCliente: ${o.customer}\\nEndereço: ${o.address}\\nPagamento: ${o.payment}\\n\\n${o.items.map(x=>x.name+" - "+br(x.price)).join("\\n")}\\n\\nTOTAL: ${br(o.total)}`;window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank")}
+async function track(){let n=document.getElementById("track").value.trim();let r=await fetch("/api/orders/"+n);if(!r.ok){tracking.innerHTML="Pedido não encontrado.";return}let o=await r.json();tracking.innerHTML=`<div class="card"><h3>Pedido #${o.number}</h3><span class="pill">${o.status}</span><p>${o.items.map(x=>x.name).join(", ")}</p><p class="total">${br(o.total)}</p></div>`}
+async function login(){let r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pwd.value})});let x=await r.json();if(!r.ok)return alert(x.error);token=x.token;localStorage.setItem("loboAdmin",token);loginBox.style.display="none";adminBox.style.display="block";load();settings()}
+async function api(url,opt={}){opt.headers={...(opt.headers||{}),Authorization:"Bearer "+token};return fetch(url,opt)}
+async function load(){let r=await api("/api/admin/orders");if(r.status===401){localStorage.removeItem("loboAdmin");token="";return}let os=await r.json();orders.innerHTML=os.map(o=>`<div class="card"><b>#${o.number} — ${o.customer}</b> <span class="pill">${o.status}</span><p>${o.address}<br>${o.items.map(x=>x.name).join(", ")}</p><p class="total">${br(o.total)}</p><select onchange="status('${o.id}',this.value)">${["Novo","Preparando","Saiu para entrega","Entregue","Cancelado"].map(s=>`<option ${s===o.status?"selected":""}>${s}</option>`).join("")}</select><button class="btn" onclick="wa(${JSON.stringify(o).replaceAll('"','&quot;')})">WhatsApp</button></div>`).join("")||"Nenhum pedido."}
+async function status(id,s){await api("/api/admin/orders/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:s})});load()}
+async function settings(){let r=await api("/api/admin/settings"),x=await r.json();rest.value=x.restaurant;wpp.value=x.whatsapp;df.value=x.deliveryFee}
+async function saveSettings(){await api("/api/admin/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({restaurant:rest.value,whatsapp:wpp.value,deliveryFee:Number(df.value)||0})});fee=Number(df.value)||0;cfg();alert("Configurações salvas.")}
+renderMenu();renderCart();cfg();setInterval(()=>{if(document.getElementById("admin").classList.contains("on")&&token)load()},5000);
+</script></body></html>
