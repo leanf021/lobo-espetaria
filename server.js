@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "lobo123";
 fs.mkdirSync(path.join(__dirname, "data"), { recursive: true });
-const db = new Database(path.join(__dirname, "data", "lobo.sqlite"));
+const db = new Database(path.join(__dirname, "data", "lobo.db"));
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS orders (
