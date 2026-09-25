@@ -90,6 +90,60 @@ app.patch("/api/admin/settings",auth,(req,res)=>{
  if(req.body.deliveryFee!==undefined)setSetting("delivery_fee",Number(req.body.deliveryFee)||0);
  res.json({ok:true});
 });
+// WEBHOOK WHATSAPP
+app.get("/webhook/whatsapp",(req,res)=>{
+  const mode=req.query["hub.mode"];
+  const token=req.query["hub.verify_token"];
+  const challenge=req.query["hub.challenge"];
 
+  if(mode==="subscribe" && token===process.env.WHATSAPP_VERIFY_TOKEN){
+    return res.status(200).send(challenge);
+  }
+
+  res.sendStatus(403);
+});
+
+app.post("/webhook/whatsapp",async(req,res)=>{
+  res.sendStatus(200);
+
+  try{
+    const message=req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+    if(!message || message.type!=="text") return;
+
+    const from=message.from;
+
+    const accessToken=process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId=process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const apiVersion=process.env.WHATSAPP_API_VERSION;
+
+    if(!accessToken || !phoneNumberId || !apiVersion){
+      console.error("Variáveis do WhatsApp não configuradas.");
+      return;
+    }
+
+    await fetch(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+      {
+        method:"POST",
+        headers:{
+          "Authorization":`Bearer ${accessToken}`,
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          messaging_product:"whatsapp",
+          to:from,
+          type:"text",
+          text:{
+            body:"Olá! 🐺 Recebemos sua mensagem. O Lobo Espetaria agradece o contato!"
+          }
+        })
+      }
+    );
+
+  }catch(error){
+    console.error("Erro no webhook WhatsApp:",error);
+  }
+});
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 app.listen(PORT,()=>console.log(`🐺 Lobo Espetaria rodando em http://localhost:${PORT}`));
