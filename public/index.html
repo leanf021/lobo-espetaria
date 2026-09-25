@@ -35,7 +35,7 @@ function renderMenu(){
 }
 
 function add(i){
-  cart.push(products[i]);
+  cart.push({name:products[i][0],price:products[i][1]});
   renderCart();
 }
 async function order(){let customer=document.getElementById("name").value.trim(),address=document.getElementById("address").value.trim();if(!customer||!address||!cart.length)return alert("Preencha nome, endereço e itens.");let s=cart.reduce((a,x)=>a+x.price,0);let body={customer,address,payment:document.getElementById("pay").value,notes:document.getElementById("notes").value,items:cart,subtotal:s,deliveryFee:fee,total:s+fee};let r=await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),o=await r.json();if(!r.ok)return alert(o.error);document.getElementById("msg").innerHTML=`<div class="card"><b>Pedido #${o.number} recebido! 🐺</b><br>Status: <span class="pill">Novo</span><br><button class="btn" onclick="wa(${JSON.stringify(o).replaceAll('"','&quot;')})">Enviar no WhatsApp</button></div>`;document.getElementById("track").value=o.number;cart=[];renderCart()}
